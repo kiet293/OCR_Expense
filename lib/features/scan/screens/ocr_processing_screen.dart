@@ -7,6 +7,7 @@ import '../../../core/services/ocr_service.dart';
 import '../../../core/services/receipt_parser_service.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../data/models/receipt_data.dart';
+import '../../receipt/screens/receipt_review_screen.dart';
 
 /// Màn hình xử lý OCR và phân tích Heuristic Regex (Phase 4 & Phase 5)
 /// Quy trình:
@@ -345,12 +346,13 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
               Expanded(
                 child: ElevatedButton.icon(
                   onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: AppColors.primary,
-                        content: Text(
-                          'Đã sẵn sàng chuyển sang Phase 6: Màn hình Review để kiểm tra & lưu dữ liệu!\n'
-                          'Merchant: ${data?.merchant ?? "Chưa rõ"} | Total: ${data?.total != null ? AppFormatter.formatCurrency(data!.total!) : "Chưa rõ"}',
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ReceiptReviewScreen(
+                          imagePath: widget.imagePath,
+                          receiptData: data ?? const ReceiptData(),
+                          rawText: result.rawText,
                         ),
                       ),
                     );
