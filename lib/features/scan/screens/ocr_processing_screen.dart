@@ -2,14 +2,18 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/services/ocr_service.dart';
+import '../../../core/services/receipt_parser_service.dart';
+import '../../../core/utils/currency_formatter.dart';
+import '../../../data/models/receipt_data.dart';
 
-/// Màn hình xử lý và hiển thị kết quả OCR (Phase 4)
+/// Màn hình xử lý OCR và phân tích Heuristic Regex (Phase 4 & Phase 5)
 /// Quy trình:
-/// - Chạy Google ML Kit Text Recognition ngoại tuyến
-/// - Hiển thị trạng thái đang xử lý (loading state)
-/// - Trình bày toàn bộ Raw OCR Text đã nhận diện được
-/// - Cung cấp khả năng tiếp tục sang bộ bóc tách Regex Heuristic (Phase 5)
+/// 1. Google ML Kit Text Recognition trích xuất Raw Text (Phase 4)
+/// 2. ReceiptParserService phân tích bóc tách Tổng tiền, Ngày tháng, Merchant (Phase 5)
+/// 3. Hiển thị tóm tắt kết quả phân tích và cho phép xem Raw OCR Text
+/// 4. Sẵn sàng chuyển tiếp sang Màn hình Review để người dùng chỉnh sửa & lưu (Phase 6)
 class OcrProcessingScreen extends StatefulWidget {
   final String imagePath;
 
@@ -25,24 +29,38 @@ class OcrProcessingScreen extends StatefulWidget {
 class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
   bool _isLoading = true;
   OcrResult? _ocrResult;
+  ReceiptData? _parsedData;
+  bool _showRawText = false;
 
   @override
   void initState() {
     super.initState();
-    _startOcrProcess();
+    _startOcrAndParsing();
   }
 
-  Future<void> _startOcrProcess() async {
+  Future<void> _startOcrAndParsing() async {
     setState(() {
       _isLoading = true;
+      _showRawText = false;
     });
 
-    final result = await OcrService.recognizeText(widget.imagePath);
+    // BƯỚC 1: Quét OCR ngoại tuyến
+    final ocrResult = await OcrService.recognizeText(widget.imagePath);
+
+    // BƯỚC 2: Bóc tách bằng Regex Heuristic Engine nếu OCR thành công
+    ReceiptData? parsed;
+    if (ocrResult.isSuccess) {
+      parsed = ReceiptParserService.parse(
+        ocrResult.rawText,
+        lines: ocrResult.lines,
+      );
+    }
 
     if (mounted) {
       setState(() {
         _isLoading = false;
-        _ocrResult = result;
+        _ocrResult = ocrResult;
+        _parsedData = parsed;
       });
     }
   }
@@ -52,13 +70,13 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Phân Tích OCR'),
+        title: const Text('Phân Tích Hóa Đơn'),
         actions: [
           if (!_isLoading && _ocrResult != null && _ocrResult!.isSuccess)
             IconButton(
               icon: const Icon(Icons.refresh_rounded),
               tooltip: 'Quét lại',
-              onPressed: _startOcrProcess,
+              onPressed: _startOcrAndParsing,
             ),
         ],
       ),
@@ -68,7 +86,7 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
     );
   }
 
-  /// Giao diện khi đang xử lý OCR
+  /// Giao diện Loading khi đang chạy OCR và Regex Parser
   Widget _buildLoadingView() {
     return Center(
       child: Padding(
@@ -76,7 +94,6 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Ảnh hóa đơn thu nhỏ
             Container(
               width: 130,
               height: 170,
@@ -97,8 +114,6 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
                   : Image.file(File(widget.imagePath), fit: BoxFit.cover),
             ),
             const SizedBox(height: 32),
-
-            // Spinner & Tiến trình
             const CircularProgressIndicator(
               color: AppColors.primary,
               strokeWidth: 3,
@@ -114,7 +129,7 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Google ML Kit đang đọc từng dòng chữ ngoại tuyến trên thiết bị...',
+              'Đang nhận diện chữ và tự động tìm Tổng tiền, Ngày & Cửa hàng...',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -127,12 +142,14 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
     );
   }
 
-  /// Giao diện hiển thị kết quả Raw Text sau khi OCR hoàn tất
+  /// Giao diện hiển thị kết quả phân tích Heuristic Regex
   Widget _buildResultView() {
     final result = _ocrResult;
     if (result == null || !result.isSuccess) {
       return _buildErrorView(result?.errorMessage);
     }
+
+    final data = _parsedData;
 
     return Column(
       children: [
@@ -142,7 +159,7 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Thẻ thông tin nhanh
+                // Thẻ thông báo phân tích thành công
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -152,24 +169,24 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 28),
+                      const Icon(Icons.auto_awesome_rounded, color: AppColors.primary, size: 28),
                       const SizedBox(width: 12),
-                      Expanded(
+                      const Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Nhận diện OCR hoàn tất!',
+                            Text(
+                              'Đã phân tích hóa đơn bằng Regex Heuristic!',
                               style: TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 15,
                                 color: AppColors.primaryDark,
                               ),
                             ),
-                            const SizedBox(height: 2),
+                            SizedBox(height: 2),
                             Text(
-                              'Đã tìm thấy ${result.lines.length} dòng văn bản từ ảnh hóa đơn.',
-                              style: const TextStyle(
+                              'Đã tự động trích xuất thông tin giao dịch cốt lõi.',
+                              style: TextStyle(
                                 fontSize: 12,
                                 color: AppColors.textSecondary,
                               ),
@@ -182,55 +199,132 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Tiêu đề nội dung OCR
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Nội dung nhận diện (Raw OCR Text)',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    Text(
-                      '${result.lines.length} dòng',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ],
+                // Thẻ dữ liệu bóc tách được (Parsed Receipt Summary)
+                const Text(
+                  'Thông tin trích xuất tự động',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
 
-                // Khung hiển thị Raw Text với phông chữ monospace rõ nét
                 Container(
-                  width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(16),
                     border: Border.all(color: AppColors.border),
                   ),
-                  child: Text(
-                    result.rawText.trim(),
-                    style: const TextStyle(
-                      fontFamily: 'monospace',
-                      fontSize: 13,
-                      height: 1.5,
-                      color: AppColors.textPrimary,
+                  child: Column(
+                    children: [
+                      _buildInfoRow(
+                        icon: Icons.storefront_rounded,
+                        label: 'Cửa hàng',
+                        value: data?.merchant ?? 'Chưa rõ (Nhập ở bước sau)',
+                        color: AppColors.primary,
+                        isBold: true,
+                      ),
+                      const Divider(height: 24),
+                      _buildInfoRow(
+                        icon: Icons.calendar_today_rounded,
+                        label: 'Ngày giao dịch',
+                        value: data?.date != null
+                            ? AppFormatter.formatDate(data!.date!)
+                            : 'Chưa rõ ngày',
+                        color: AppColors.secondary,
+                      ),
+                      const Divider(height: 24),
+                      _buildInfoRow(
+                        icon: Icons.payments_rounded,
+                        label: 'Tổng tiền',
+                        value: data?.total != null
+                            ? AppFormatter.formatCurrency(data!.total!)
+                            : 'Chưa nhận diện được tiền',
+                        color: AppColors.success,
+                        isBold: true,
+                      ),
+                      const Divider(height: 24),
+                      _buildInfoRow(
+                        icon: AppConstants.getCategoryIcon(data?.suggestedCategory ?? 'Khác'),
+                        label: 'Danh mục gợi ý',
+                        value: data?.suggestedCategory ?? 'Khác',
+                        color: AppConstants.getCategoryColor(data?.suggestedCategory ?? 'Khác'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Nút thu gọn/mở rộng xem Raw OCR Text
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _showRawText = !_showRawText;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.description_outlined, size: 20, color: AppColors.textSecondary),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Nội dung OCR gốc (${result.lines.length} dòng)',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Icon(
+                          _showRawText ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
                     ),
                   ),
                 ),
+
+                // Nội dung Raw OCR Text khi mở rộng
+                if (_showRawText) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      result.rawText.trim(),
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        height: 1.5,
+                        color: Color(0xFFE2E8F0),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         ),
 
-        // Nút hành động phía dưới
+        // Thanh công cụ hành động tiếp theo
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           decoration: const BoxDecoration(
@@ -252,10 +346,11 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
+                      SnackBar(
                         backgroundColor: AppColors.primary,
                         content: Text(
-                          'Sẵn sàng chuyển sang Phase 5: Bóc tách Regex Heuristic (Merchant, Date, Total)!',
+                          'Đã sẵn sàng chuyển sang Phase 6: Màn hình Review để kiểm tra & lưu dữ liệu!\n'
+                          'Merchant: ${data?.merchant ?? "Chưa rõ"} | Total: ${data?.total != null ? AppFormatter.formatCurrency(data!.total!) : "Chưa rõ"}',
                         ),
                       ),
                     );
@@ -268,7 +363,7 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
                   ),
                   icon: const Icon(Icons.arrow_forward_rounded, size: 20),
                   label: const Text(
-                    'Tiếp tục phân tích dữ liệu',
+                    'Kiểm tra & Chỉnh sửa',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -280,7 +375,51 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
     );
   }
 
-  /// Giao diện xử lý khi không tìm thấy chữ hoặc OCR lỗi
+  Widget _buildInfoRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+    bool isBold = false,
+  }) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 20, color: color),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: isBold ? FontWeight.w700 : FontWeight.w500,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildErrorView(String? message) {
     return Center(
       child: Padding(
@@ -330,10 +469,7 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
-                  onPressed: () {
-                    // Tiếp tục cho nhập thủ công
-                    Navigator.pop(context);
-                  },
+                  onPressed: () => Navigator.pop(context),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
