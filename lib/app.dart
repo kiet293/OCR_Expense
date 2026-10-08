@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'core/constants/app_colors.dart';
+import 'core/services/receipt_controller.dart';
 import 'core/theme/app_theme.dart';
 import 'features/expenses/screens/expense_history_screen.dart';
 import 'features/home/screens/home_screen.dart';
@@ -31,6 +32,13 @@ class MainNavigationShell extends StatefulWidget {
 
 class _MainNavigationShellState extends State<MainNavigationShell> {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Khởi tạo và tải dữ liệu từ SQLite ngay khi app khởi động
+    ReceiptController.instance.loadReceipts();
+  }
 
   void _onTabSelected(int index) {
     setState(() {

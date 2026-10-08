@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/receipt_controller.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../data/models/receipt_data.dart';
 import '../../../data/models/receipt_model.dart';
@@ -216,7 +217,7 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
   }
 
   /// Xử lý xác nhận lưu hóa đơn (Chuẩn bị dữ liệu cho Phase 7 Local Database)
-  void _handleSaveReceipt() {
+  Future<void> _handleSaveReceipt() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -248,10 +249,18 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
       createdAt: DateTime.now(),
     );
 
-    // Thông báo cho callback nếu có (để Phase 7 cắm trực tiếp vào Repository)
+    // Lưu trực tiếp vào cơ sở dữ liệu SQLite thông qua ReceiptController
+    try {
+      await ReceiptController.instance.addReceipt(receipt);
+    } catch (e) {
+      debugPrint('Lỗi khi lưu SQLite: $e');
+    }
+
     if (widget.onSave != null) {
       widget.onSave!(receipt);
     }
+
+    if (!mounted) return;
 
     // Hiển thị dialog xác nhận thành công
     showDialog(
