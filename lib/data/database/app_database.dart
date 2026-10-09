@@ -29,7 +29,7 @@ class AppDatabase {
       return openDatabase(inMemoryDatabasePath, version: _dbVersion,
           onCreate: (db, version) async {
         await _createTables(db);
-        await _seedInitialData(db);
+        await seedInitialData(db);
       });
     }
 
@@ -41,7 +41,7 @@ class AppDatabase {
       version: _dbVersion,
       onCreate: (db, version) async {
         await _createTables(db);
-        await _seedInitialData(db);
+        await seedInitialData(db);
       },
     );
   }
@@ -65,7 +65,7 @@ class AppDatabase {
 
   /// Chèn 4 hóa đơn mẫu ban đầu theo đúng yêu cầu Mục 23 (Test Data)
   /// Giúp người dùng và giảng viên có thể test ngay các chức năng thống kê và lịch sử
-  Future<void> _seedInitialData(Database db) async {
+  Future<void> seedInitialData(Database db) async {
     final sampleReceipts = [
       ReceiptModel(
         merchant: 'WINMART',

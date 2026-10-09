@@ -471,7 +471,18 @@ class _OcrProcessingScreenState extends State<OcrProcessingScreen> {
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton.icon(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ReceiptReviewScreen(
+                          imagePath: widget.imagePath,
+                          receiptData: const ReceiptData(),
+                          rawText: '',
+                        ),
+                      ),
+                    );
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,

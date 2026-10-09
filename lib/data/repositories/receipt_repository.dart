@@ -127,4 +127,17 @@ class ReceiptRepository {
     }
     return totals;
   }
+
+  /// Xóa toàn bộ hóa đơn trong database
+  Future<int> clearAllReceipts() async {
+    final db = await _dbProvider.database;
+    return await db.delete(AppDatabase.tableReceipts);
+  }
+
+  /// Khôi phục lại 4 hóa đơn demo mẫu ban đầu
+  Future<void> resetDemoData() async {
+    final db = await _dbProvider.database;
+    await db.delete(AppDatabase.tableReceipts);
+    await _dbProvider.seedInitialData(db);
+  }
 }

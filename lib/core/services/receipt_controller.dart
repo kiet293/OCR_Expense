@@ -74,4 +74,34 @@ class ReceiptController extends ChangeNotifier {
       rethrow;
     }
   }
+
+  /// Khôi phục dữ liệu mẫu ban đầu (phục vụ thuyết trình/chấm đồ án)
+  Future<void> resetDemoData() async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _repository.resetDemoData();
+      await loadReceipts();
+    } catch (e) {
+      debugPrint('[ReceiptController] Lỗi khi reset dữ liệu mẫu: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Xóa toàn bộ dữ liệu hóa đơn
+  Future<void> clearAllReceipts() async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _repository.clearAllReceipts();
+      await loadReceipts();
+    } catch (e) {
+      debugPrint('[ReceiptController] Lỗi khi xóa toàn bộ: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }
