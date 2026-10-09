@@ -19,6 +19,7 @@ class ReceiptReviewScreen extends StatefulWidget {
   final ReceiptData receiptData;
   final String rawText;
   final Function(ReceiptModel savedReceipt)? onSave;
+  final ReceiptModel? existingReceipt;
 
   const ReceiptReviewScreen({
     super.key,
@@ -26,7 +27,23 @@ class ReceiptReviewScreen extends StatefulWidget {
     required this.receiptData,
     required this.rawText,
     this.onSave,
+    this.existingReceipt,
   });
+
+  /// Constructor tiện ích mở màn hình ở chế độ chỉnh sửa hóa đơn đã có
+  ReceiptReviewScreen.edit({
+    super.key,
+    required ReceiptModel receipt,
+  })  : existingReceipt = receipt,
+        imagePath = receipt.imagePath,
+        rawText = receipt.rawText,
+        receiptData = ReceiptData(
+          merchant: receipt.merchant,
+          total: receipt.total,
+          date: receipt.date,
+          suggestedCategory: receipt.category,
+        ),
+        onSave = null;
 
   @override
   State<ReceiptReviewScreen> createState() => _ReceiptReviewScreenState();
@@ -46,21 +63,34 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
   @override
   void initState() {
     super.initState();
-    final data = widget.receiptData;
+    final existing = widget.existingReceipt;
+    if (existing != null) {
+      _merchantController = TextEditingController(text: existing.merchant);
+      _totalController = TextEditingController(
+        text: existing.total.toInt().toString(),
+      );
+      _noteController = TextEditingController(text: existing.note ?? '');
+      _selectedDate = existing.date;
+      _selectedCategory = AppConstants.categories.contains(existing.category)
+          ? existing.category
+          : AppConstants.categories.first;
+    } else {
+      final data = widget.receiptData;
 
-    _merchantController = TextEditingController(text: data.merchant ?? '');
-    _totalController = TextEditingController(
-      text: data.total != null ? data.total!.toInt().toString() : '',
-    );
-    _noteController = TextEditingController();
+      _merchantController = TextEditingController(text: data.merchant ?? '');
+      _totalController = TextEditingController(
+        text: data.total != null ? data.total!.toInt().toString() : '',
+      );
+      _noteController = TextEditingController();
 
-    _selectedDate = data.date ?? DateTime.now();
+      _selectedDate = data.date ?? DateTime.now();
 
-    // Chọn danh mục gợi ý nếu có, ngược lại lấy danh mục đầu tiên
-    _selectedCategory = (data.suggestedCategory != null &&
-            AppConstants.categories.contains(data.suggestedCategory))
-        ? data.suggestedCategory!
-        : AppConstants.categories.first;
+      // Chọn danh mục gợi ý nếu có, ngược lại lấy danh mục đầu tiên
+      _selectedCategory = (data.suggestedCategory != null &&
+              AppConstants.categories.contains(data.suggestedCategory))
+          ? data.suggestedCategory!
+          : AppConstants.categories.first;
+    }
   }
 
   @override
@@ -236,6 +266,38 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
       _isSaving = true;
     });
 
+    if (widget.existingReceipt != null) {
+      final updated = widget.existingReceipt!.copyWith(
+        merchant: _merchantController.text.trim().isEmpty
+            ? 'Cửa hàng không rõ'
+            : _merchantController.text.trim(),
+        total: totalAmount,
+        date: _selectedDate,
+        category: _selectedCategory,
+        note: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
+      );
+
+      try {
+        await ReceiptController.instance.updateReceipt(updated);
+      } catch (e) {
+        debugPrint('Lỗi khi cập nhật SQLite: $e');
+      }
+
+      if (widget.onSave != null) {
+        widget.onSave!(updated);
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đã cập nhật hóa đơn thành công!'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.pop(context, updated);
+      return;
+    }
+
     final receipt = ReceiptModel(
       merchant: _merchantController.text.trim().isEmpty
           ? 'Cửa hàng không rõ'
@@ -333,7 +395,7 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Xác Nhận Hóa Đơn'),
+        title: Text(widget.existingReceipt != null ? 'Chỉnh Sửa Hóa Đơn' : 'Xác Nhận Hóa Đơn'),
       ),
       body: SafeArea(
         child: Column(
@@ -595,9 +657,9 @@ class _ReceiptReviewScreenState extends State<ReceiptReviewScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       icon: const Icon(Icons.save_rounded, size: 20),
-                      label: const Text(
-                        'Lưu hóa đơn',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                      label: Text(
+                        widget.existingReceipt != null ? 'Lưu thay đổi' : 'Lưu hóa đơn',
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                       ),
                     ),
                   ),

@@ -3,6 +3,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/receipt_controller.dart';
 import '../../../core/utils/currency_formatter.dart';
+import '../../receipt/screens/receipt_detail_screen.dart';
 import '../../scan/screens/camera_scan_screen.dart';
 import '../widgets/quick_stat_card.dart';
 import '../widgets/recent_receipt_item.dart';
@@ -225,12 +226,10 @@ class HomeScreen extends StatelessWidget {
                         return RecentReceiptItem(
                           receipt: receipt,
                           onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Hóa đơn: ${receipt.merchant} (${AppFormatter.formatCurrency(receipt.total)})',
-                                ),
-                                duration: const Duration(seconds: 1),
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ReceiptDetailScreen(receipt: receipt),
                               ),
                             );
                           },
